@@ -5,7 +5,6 @@ go 1.23.6
 require (
 	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/stretchr/testify v1.10.0
-	github.com/urfave/cli/v3 v3.1.1
 )
 
 require (
