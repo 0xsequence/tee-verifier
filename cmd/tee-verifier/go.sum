@@ -1,3 +1,5 @@
+github.com/0xsequence/tee-verifier v0.0.0-20250417175915-be18a50409ce h1:xq2zGKAt/Iwu4eWInT65fgjnbxrEwVm782rTb0Hh5s8=
+github.com/0xsequence/tee-verifier v0.0.0-20250417175915-be18a50409ce/go.mod h1:pcihAC9FyfPYsAbSnEnxuwTsL9uYO5uc500O9uS99k8=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fxamacker/cbor/v2 v2.8.0 h1:fFtUGXUzXPHTIUdne5+zzMPTfffl3RD5qYnkY40vtxU=

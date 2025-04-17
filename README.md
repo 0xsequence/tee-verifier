@@ -5,14 +5,14 @@ Library and CLI tool for verifying TEE (Trusted Execution Environment) enclave a
 ## Install
 
 ```
-go get https://github.com/0xsequence/tee-verifier
+go install github.com/0xsequence/tee-verifier/cmd/tee-verifier@latest
 ```
 
 ## CLI usage
 
 ```
 NAME:
-   tee-verifier - Verify attestation documents
+   tee-verifier - Verify enclave attestations
 
 USAGE:
    tee-verifier [global options] URL
