@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -32,6 +34,11 @@ func main() {
 				Name:  "nonce",
 				Usage: "expected nonce",
 			},
+			&cli.StringFlag{
+				Name:    "data",
+				Aliases: []string{"d"},
+				Usage:   "HTTP POST data",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			input := cmd.Args().First()
@@ -40,23 +47,24 @@ func main() {
 			}
 
 			var (
-				doc string
-				err error
+				doc  string
+				resp *Response
+				err  error
 			)
 			if strings.HasPrefix(input, "http") || strings.HasPrefix(input, "https") {
-				doc, err = fetchAttestationFromURL(input, cmd.String("nonce"))
+				doc, resp, err = fetchAttestationFromURL(input, cmd.String("nonce"), cmd.String("data"))
 				if err != nil {
-					return fmt.Errorf("failed to download file: %w", err)
+					return fmt.Errorf("failed to read attestation from URL: %w", err)
 				}
 			} else if input == "-" {
 				doc, err = fetchAttestationFromStdin()
 				if err != nil {
-					return fmt.Errorf("failed to read from stdin: %w", err)
+					return fmt.Errorf("failed to read attestation from stdin: %w", err)
 				}
 			} else {
 				docBytes, err := os.ReadFile(input)
 				if err != nil {
-					return fmt.Errorf("failed to read file: %w", err)
+					return fmt.Errorf("failed to read attestation from file: %w", err)
 				}
 				doc = string(docBytes)
 			}
@@ -81,7 +89,7 @@ func main() {
 				opts = append(opts, nitro.WithExpectedNonce([]byte(nonce)))
 			}
 
-			out := outputFromAttestation(att, opts...)
+			out := outputFromAttestation(att, resp, opts...)
 			if cmd.Bool("json") {
 				json.NewEncoder(os.Stdout).Encode(out)
 			} else {
@@ -89,6 +97,10 @@ func main() {
 			}
 
 			if !out.AttestationValid || !out.SignatureValid {
+				os.Exit(1)
+			}
+
+			if out.UserDataValid != nil && !*out.UserDataValid {
 				os.Exit(1)
 			}
 
@@ -102,10 +114,20 @@ func main() {
 	}
 }
 
-func fetchAttestationFromURL(url string, nonce string) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func fetchAttestationFromURL(url string, nonce string, data string) (string, *Response, error) {
+	var (
+		req *http.Request
+		err error
+	)
+	if data != "" {
+		body := bytes.NewBuffer([]byte(data))
+		req, err = http.NewRequest(http.MethodPost, url, body)
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req, err = http.NewRequest(http.MethodGet, url, nil)
+	}
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	if nonce != "" {
 		req.Header.Set("x-attestation-nonce", nonce)
@@ -113,15 +135,34 @@ func fetchAttestationFromURL(url string, nonce string) (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to download file: %w", err)
+		return "", nil, fmt.Errorf("failed to download file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	doc := resp.Header.Get("x-attestation-document")
 	if doc == "" {
-		return "", fmt.Errorf("no attestation document found")
+		return "", nil, fmt.Errorf("no attestation document found")
 	}
 
-	return doc, nil
+	hasher := sha256.New()
+	hasher.Write([]byte(req.Method + " " + req.URL.Path + "\n"))
+	if data != "" {
+		hasher.Write([]byte(data))
+	}
+	hasher.Write([]byte("\n"))
+	hasher.Write(body)
+	digest := hasher.Sum(nil)
+
+	return doc, &Response{
+		Status: resp.StatusCode,
+		Body:   string(body),
+		Digest: digest,
+	}, nil
 }
 
 func fetchAttestationFromStdin() (string, error) {
