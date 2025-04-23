@@ -16,10 +16,16 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+var (
+	Version   = "dev"
+	Commit    = "dev"
+	BuildDate = "unknown date"
+)
+
 func main() {
 	cmd := &cli.Command{
 		Name:      "tee-verifier",
-		Usage:     "Verify attestation documents",
+		Usage:     "Verify enclave attestation documents",
 		ArgsUsage: "URL",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -38,6 +44,17 @@ func main() {
 				Name:    "data",
 				Aliases: []string{"d"},
 				Usage:   "HTTP POST data",
+			},
+			&cli.BoolFlag{
+				Name:        "version",
+				Aliases:     []string{"v"},
+				Usage:       "show version information",
+				HideDefault: true,
+				Action: func(ctx context.Context, cmd *cli.Command, _ bool) error {
+					fmt.Printf("tee-verifier %s built from commit %s on %s\n", Version, Commit, BuildDate)
+					os.Exit(0)
+					return nil
+				},
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
