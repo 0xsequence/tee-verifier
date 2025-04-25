@@ -1,6 +1,6 @@
 module github.com/0xsequence/tee-verifier
 
-go 1.23.6
+go 1.23
 
 require (
 	github.com/fxamacker/cbor/v2 v2.8.0
