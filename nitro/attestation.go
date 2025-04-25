@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -81,10 +82,11 @@ func (d *Attestation) FromBytes(data []byte) (err error) {
 }
 
 type validateConfig struct {
-	time            time.Time
-	rootFingerprint string
-	expectedPCRs    map[int]string
-	expectedNonce   []byte
+	time             time.Time
+	rootFingerprints []string
+	expectedPCRs     map[int]string
+	expectedNonce    []byte
+	expectedUserData []byte
 }
 
 type ValidateOption func(*validateConfig)
@@ -95,15 +97,21 @@ func WithTime(t time.Time) ValidateOption {
 	}
 }
 
-func WithRootFingerprint(fp string) ValidateOption {
+func WithRootFingerprint(fps ...string) ValidateOption {
 	return func(o *validateConfig) {
-		o.rootFingerprint = fp
+		o.rootFingerprints = fps
 	}
 }
 
 func WithExpectedNonce(nonce []byte) ValidateOption {
 	return func(o *validateConfig) {
 		o.expectedNonce = nonce
+	}
+}
+
+func WithExpectedUserData(userData []byte) ValidateOption {
+	return func(o *validateConfig) {
+		o.expectedUserData = userData
 	}
 }
 
@@ -117,13 +125,15 @@ func (d *Attestation) Validate(opts ...ValidateOption) error {
 	cfg := &validateConfig{
 		time: time.Now(),
 		// From https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html#validation-process
-		rootFingerprint: "641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b",
+		rootFingerprints: []string{
+			"641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b",
+		},
 	}
 	for _, opt := range opts {
 		opt(cfg)
 	}
 
-	if d.RootCertFingerprint() != cfg.rootFingerprint {
+	if !slices.Contains(cfg.rootFingerprints, d.RootCertFingerprint()) {
 		return fmt.Errorf("invalid root certificate")
 	}
 
@@ -149,6 +159,9 @@ func (d *Attestation) Validate(opts ...ValidateOption) error {
 	}
 	if cfg.expectedNonce != nil && !bytes.Equal(d.Nonce, cfg.expectedNonce) {
 		return fmt.Errorf("invalid nonce: %s", d.Nonce)
+	}
+	if cfg.expectedUserData != nil && !bytes.Equal(d.UserData, cfg.expectedUserData) {
+		return fmt.Errorf("invalid user data: %s", d.UserData)
 	}
 	return nil
 }

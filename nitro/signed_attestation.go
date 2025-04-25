@@ -1,6 +1,10 @@
 package nitro
 
-import "github.com/fxamacker/cbor/v2"
+import (
+	"fmt"
+
+	"github.com/fxamacker/cbor/v2"
+)
 
 type SignedAttestation struct {
 	Attestation
@@ -10,12 +14,12 @@ type SignedAttestation struct {
 func Parse(data []byte) (*SignedAttestation, error) {
 	var sign1 COSESign1
 	if err := cbor.Unmarshal(data, &sign1); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal COSE Sign1: %w", err)
 	}
 
 	var doc Attestation
 	if err := doc.FromBytes(sign1.Payload); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse attestation: %w", err)
 	}
 
 	att := &SignedAttestation{
