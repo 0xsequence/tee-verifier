@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -72,10 +73,14 @@ func outputFromAttestation(att *nitro.SignedAttestation, resp *Response, validat
 
 	if err := att.Validate(validateOpts...); err == nil {
 		out.AttestationValid = true
+	} else {
+		fmt.Fprintf(os.Stderr, "invalid attestation: %s\n", err)
 	}
 
 	if err := att.Verify(); err == nil {
 		out.SignatureValid = true
+	} else {
+		fmt.Fprintf(os.Stderr, "invalid signature: %s\n", err)
 	}
 
 	if resp != nil {

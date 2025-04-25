@@ -22,6 +22,10 @@ var (
 	BuildDate = "unknown date"
 )
 
+var (
+	verbose = false
+)
+
 func main() {
 	cmd := &cli.Command{
 		Name:      "tee-verifier",
@@ -41,13 +45,23 @@ func main() {
 				Usage: "expected nonce",
 			},
 			&cli.StringFlag{
+				Name:  "root-fingerprint",
+				Usage: "expected root certificate fingerprint",
+			},
+			&cli.StringFlag{
 				Name:    "data",
 				Aliases: []string{"d"},
 				Usage:   "HTTP POST data",
 			},
 			&cli.BoolFlag{
-				Name:        "version",
+				Name:        "verbose",
 				Aliases:     []string{"v"},
+				Usage:       "verbose output",
+				Destination: &verbose,
+			},
+			&cli.BoolFlag{
+				Name:        "version",
+				Aliases:     []string{"V"},
 				Usage:       "show version information",
 				HideDefault: true,
 				Action: func(ctx context.Context, cmd *cli.Command, _ bool) error {
@@ -60,7 +74,9 @@ func main() {
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			input := cmd.Args().First()
 			if input == "" {
-				return fmt.Errorf("input file/URL is required")
+				cli.ShowAppHelp(cmd)
+				os.Exit(0)
+				return nil
 			}
 
 			var (
@@ -104,6 +120,9 @@ func main() {
 			}
 			if nonce := cmd.String("nonce"); nonce != "" {
 				opts = append(opts, nitro.WithExpectedNonce([]byte(nonce)))
+			}
+			if rootFingerprint := cmd.String("root-fingerprint"); rootFingerprint != "" {
+				opts = append(opts, nitro.WithRootFingerprint(rootFingerprint))
 			}
 
 			out := outputFromAttestation(att, resp, opts...)
