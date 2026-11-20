@@ -39,12 +39,21 @@ USAGE:
    tee-verifier [global options] URL
 
 GLOBAL OPTIONS:
-   --json                    output in JSON format (default: false)
-   --pcr0 string             expected PCR0 value
-   --nonce string            expected nonce
-   --data string, -d string  HTTP POST data
-   --version, -v             show version information
-   --help, -h                show help
+   --json                                                     output in JSON format (default: false)
+   --pcr0 string                                              expected PCR0 value
+   --nonce string                                             expected nonce
+   --root-fingerprint string                                  expected root certificate fingerprint
+   --data string, -d string                                   HTTP POST data
+   --header string, -H string [ --header string, -H string ]  extra HTTP request header, "Name: value" (e.g. Oms-Wallet-Signature)
+   --verbose, -v                                              verbose output (default: false)
+   --version, -V                                              show version information
+   --help, -h                                                 show help
+```
+
+To verify a signed request, pass the signature header so it is both sent and included in the `UserData` check:
+
+```
+tee-verifier -d '{...}' -H 'Oms-Wallet-Signature: 0x...' https://waas.sequence.app/rpc/WaasAuthenticator/RegisterSession
 ```
 
 ## How it works
@@ -78,10 +87,18 @@ The verifier performs multiple levels of validation:
 
 ### UserData format
 
-Syntax:
+Syntax is `"Sequence/" + Version + ":" + base64(sha256(Preimage))`. The verifier accepts versions 1 and 2 and reports any other version as invalid.
+
+Version 1:
 
 ```
 "Sequence/1:" + base64(sha256(HttpMethod + " " + HttpPath + "\n" + RequestBody + "\n" + ResponseBody))
+```
+
+Version 2 additionally binds the request signature, so a TLS edge cannot re-sign the request with its own key undetected. `Signature` is the raw value of the `Oms-Wallet-Signature` request header exactly as sent, or the empty string if the request has none:
+
+```
+"Sequence/2:" + base64(sha256(HttpMethod + " " + HttpPath + "\n" + Signature + "\n" + RequestBody + "\n" + ResponseBody))
 ```
 
 ## Acknowledgements
