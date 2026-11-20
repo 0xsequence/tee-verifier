@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -53,6 +52,11 @@ func main() {
 				Aliases: []string{"d"},
 				Usage:   "HTTP POST data",
 			},
+			&cli.StringSliceFlag{
+				Name:    "header",
+				Aliases: []string{"H"},
+				Usage:   "extra HTTP request header, \"Name: value\" (e.g. Oms-Wallet-Signature)",
+			},
 			&cli.BoolFlag{
 				Name:        "verbose",
 				Aliases:     []string{"v"},
@@ -85,7 +89,7 @@ func main() {
 				err  error
 			)
 			if strings.HasPrefix(input, "http") || strings.HasPrefix(input, "https") {
-				doc, resp, err = fetchAttestationFromURL(input, cmd.String("nonce"), cmd.String("data"))
+				doc, resp, err = fetchAttestationFromURL(input, cmd.String("nonce"), cmd.String("data"), cmd.StringSlice("header"))
 				if err != nil {
 					return fmt.Errorf("failed to read attestation from URL: %w", err)
 				}
@@ -150,7 +154,7 @@ func main() {
 	}
 }
 
-func fetchAttestationFromURL(url string, nonce string, data string) (string, *Response, error) {
+func fetchAttestationFromURL(url string, nonce string, data string, headers []string) (string, *Response, error) {
 	var (
 		req *http.Request
 		err error
@@ -167,6 +171,13 @@ func fetchAttestationFromURL(url string, nonce string, data string) (string, *Re
 	}
 	if nonce != "" {
 		req.Header.Set("x-attestation-nonce", nonce)
+	}
+	for _, h := range headers {
+		name, value, ok := strings.Cut(h, ":")
+		if !ok {
+			return "", nil, fmt.Errorf("invalid header %q: expected \"Name: value\"", h)
+		}
+		req.Header.Set(strings.TrimSpace(name), strings.TrimSpace(value))
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -185,19 +196,13 @@ func fetchAttestationFromURL(url string, nonce string, data string) (string, *Re
 		return "", nil, fmt.Errorf("no attestation document found")
 	}
 
-	hasher := sha256.New()
-	hasher.Write([]byte(req.Method + " " + req.URL.Path + "\n"))
-	if data != "" {
-		hasher.Write([]byte(data))
-	}
-	hasher.Write([]byte("\n"))
-	hasher.Write(body)
-	digest := hasher.Sum(nil)
-
 	return doc, &Response{
-		Status: resp.StatusCode,
-		Body:   string(body),
-		Digest: digest,
+		Method:      req.Method,
+		Path:        req.URL.Path,
+		Signature:   req.Header.Get("Oms-Wallet-Signature"),
+		RequestBody: data,
+		Status:      resp.StatusCode,
+		Body:        string(body),
 	}, nil
 }
 

@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,9 +16,47 @@ import (
 )
 
 type Response struct {
-	Digest []byte `json:"digest"`
-	Status int    `json:"status"`
-	Body   string `json:"body"`
+	Method      string
+	Path        string
+	Signature   string // Oms-Wallet-Signature request header, "" if absent
+	RequestBody string
+	Status      int
+	Body        string
+}
+
+// VerifyUserData checks that userData is "Sequence/<N>:<base64(sha256(preimage))>"
+// where the preimage for the supported versions is:
+//
+//	1: METHOD + " " + PATH + "\n" + RequestBody + "\n" + Body
+//	2: METHOD + " " + PATH + "\n" + Signature + "\n" + RequestBody + "\n" + Body
+func (r *Response) VerifyUserData(userData []byte) error {
+	prefix, encoded, ok := strings.Cut(string(userData), ":")
+	if !ok {
+		return fmt.Errorf("missing version prefix")
+	}
+	num, ok := strings.CutPrefix(prefix, "Sequence/")
+	version, err := strconv.ParseUint(num, 10, 8)
+	if !ok || err != nil {
+		return fmt.Errorf("invalid version prefix %q", prefix)
+	}
+	expected, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return fmt.Errorf("invalid digest encoding: %w", err)
+	}
+
+	h := sha256.New()
+	switch version {
+	case 1:
+		fmt.Fprintf(h, "%s %s\n%s\n%s", r.Method, r.Path, r.RequestBody, r.Body)
+	case 2:
+		fmt.Fprintf(h, "%s %s\n%s\n%s\n%s", r.Method, r.Path, r.Signature, r.RequestBody, r.Body)
+	default:
+		return fmt.Errorf("unsupported version %d", version)
+	}
+	if !bytes.Equal(expected, h.Sum(nil)) {
+		return fmt.Errorf("digest mismatch")
+	}
+	return nil
 }
 
 type Output struct {
@@ -87,13 +127,11 @@ func outputFromAttestation(att *nitro.SignedAttestation, resp *Response, validat
 		out.ResponseStatus = resp.Status
 		out.ResponseBody = resp.Body
 
-		if resp.Digest != nil && att.UserData != nil && strings.HasPrefix(string(att.UserData), "Sequence/1:") {
-			expectedDigest, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(string(att.UserData), "Sequence/1:"))
-			if bytes.Equal(expectedDigest, resp.Digest) {
-				out.UserDataValid = ptr(true)
-			} else {
-				out.UserDataValid = ptr(false)
-			}
+		if err := resp.VerifyUserData(att.UserData); err == nil {
+			out.UserDataValid = ptr(true)
+		} else {
+			out.UserDataValid = ptr(false)
+			fmt.Fprintf(os.Stderr, "invalid user data: %s\n", err)
 		}
 	}
 
